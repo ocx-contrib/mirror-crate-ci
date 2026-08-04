@@ -40,17 +40,6 @@ The release archive also ships upstream's `LICENSE-APACHE`, `LICENSE-MIT`,
 `README.md` and a `doc/` directory beside the binary; they are inside the bundle
 but not on `PATH`.
 
-## Install with ocx
-
-```sh
-ocx install ocx.sh/crate-ci/typos
-```
-
-```sh
-# or pin a specific version
-ocx install ocx.sh/crate-ci/typos:1.49.0
-```
-
 ## Links
 
 - [typos on GitHub](https://github.com/crate-ci/typos)
