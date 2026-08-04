@@ -1,0 +1,161 @@
+# ⚠ `extends:` is a SHALLOW merge of TOP-LEVEL KEYS. Setting a key here
+# REPLACES the base's block outright — there is no per-key merge. `platforms:`
+# is deliberately NOT restated below: it carries the container legs that make
+# this spec's libc claims honest, and restating it to tweak one runner would
+# drop them all without reddening anything. This repo is single-package, so the
+# measured matrix lives in the base and nothing here touches it.
+extends: ../mirror-base.yml
+
+name: typos
+
+# Logical index package `crate-ci/typos` at the physical path
+# `ghcr.io/ocx-contrib/crate-ci/typos` — slash segments, never hyphen-flattened.
+# Two segments always; `crate-ci` is the project's own org (it also publishes
+# `committed`, `cargo-release`, `clippy-action`), so it is the namespace and the
+# repo may take a second package without a rename. The first segment must be
+# this repo's own GitHub owner: GITHUB_TOKEN only authorises packages owned by
+# the repo the workflow runs in.
+target:
+  registry: ghcr.io
+  repository: ocx-contrib/crate-ci/typos
+
+source:
+  type: github_release
+  owner: crate-ci
+  repo: typos
+  # Tags are v-prefixed bare semver (e.g. "v1.49.0"); no other tag scheme
+  # appears in the release history.
+  tag_pattern: "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+
+# ─── libc gate (Phase 3.5) — the evidence, not the conclusion ───────────────
+#
+# `os.features` states what an artifact REQUIRES OF THE HOST. Upstream ships
+# Linux as musl-ONLY on both arches (there is no `-gnu` asset in any release),
+# and a `-musl` FILENAME is not evidence of static linkage — PT_INTERP is. It
+# was read for every declared artifact, on BOTH ends of the range:
+#
+#   $ file typos                 # x86_64-unknown-linux-musl, v1.49.0 and v1.47.2
+#   ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked,
+#   BuildID[sha1]=…, with debug_info, not stripped
+#   $ file typos                 # aarch64-unknown-linux-musl, v1.49.0 and v1.47.2
+#   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked,
+#   BuildID[sha1]=…, with debug_info, not stripped
+#
+#   $ readelf -l typos | grep -c INTERP  → 0   (amd64 + arm64, v1.47.2 + v1.49.0)
+#   $ readelf -d typos | grep -c NEEDED  → 0   (amd64 + arm64, v1.47.2 + v1.49.0)
+#   $ readelf -V typos | grep -oE 'GLIBC_[0-9.]+'  → (empty, all four)
+#
+#     ⇒ no PT_INTERP, no DT_NEEDED, no glibc symbol versions at all: the
+#       artifact requires NOTHING of the host userland → BARE `linux/amd64`
+#       and BARE `linux/arm64`. `+libc.musl` would be a FALSE requirement,
+#       hiding the package from every glibc host it in fact runs on, purely
+#       because of a filename. The alpine:3.20 container leg on BOTH arches is
+#       what turns the bare keys' universality claim into evidence.
+#
+# Non-Linux, for the record (no libc key applies to either):
+#   $ file typos      (aarch64-apple-darwin) → Mach-O 64-bit arm64 executable
+#   $ file typos.exe  (x86_64-pc-windows-msvc) → PE32+ executable … x86-64
+#
+# ─── Scope (verified against v1.47.2 — the floor — v1.48.0 and v1.49.0) ─────
+#
+# Every release in range publishes EXACTLY FIVE assets and nothing else — no
+# checksum sidecars, no signatures, no source archives beyond GitHub's
+# automatic ones. Each anchored pattern below was checked with `grep -cE`
+# against the FULL per-release asset list of every in-range release and matches
+# EXACTLY ONE on each. A pattern matching ZERO is silently skipped, not an
+# error — it would yield a green run with a missing platform.
+#
+# Asset names embed the tag (`typos-v1.49.0-…`), so the version segment is
+# matched by shape. Each name was checked to agree with its OWN tag — an
+# upstream can ship the previous version's binaries under a new tag; typos does
+# not.
+#
+# windows/arm64 IS NOT DECLARED, and this is a permanent exclusion rather than
+# a staging step: upstream ships no aarch64 Windows asset in ANY release. The
+# five assets are the two `unknown-linux-musl`, the two `apple-darwin`, and the
+# single `x86_64-pc-windows-msvc`. A declared-but-unmatched platform boots a
+# real `windows-11-arm` runner and reports SUCCESS having tested nothing, so it
+# is worse than absent.
+assets:
+  linux/amd64:
+    - "^typos-v\\d+\\.\\d+\\.\\d+-x86_64-unknown-linux-musl\\.tar\\.gz$"
+  linux/arm64:
+    - "^typos-v\\d+\\.\\d+\\.\\d+-aarch64-unknown-linux-musl\\.tar\\.gz$"
+  # Staged rollout — uncommented one pass at a time, in lockstep with the
+  # matching key in ../mirror-base.yml's `platforms:`. See the note there.
+  # darwin/amd64:
+  #   - "^typos-v\\d+\\.\\d+\\.\\d+-x86_64-apple-darwin\\.tar\\.gz$"
+  # darwin/arm64:
+  #   - "^typos-v\\d+\\.\\d+\\.\\d+-aarch64-apple-darwin\\.tar\\.gz$"
+  # windows/amd64:
+  #   - "^typos-v\\d+\\.\\d+\\.\\d+-x86_64-pc-windows-msvc\\.zip$"
+
+# Every archive — tarball and zip alike — is FLAT: the executable sits at the
+# archive root beside `LICENSE-APACHE`, `LICENSE-MIT`, `README.md` and a `doc/`
+# directory, with NO wrapper directory. Confirmed with `gzip -dc … | tar tvf -`
+# and `unzip -l` on all five v1.49.0 assets plus both v1.47.2 Linux assets;
+# `ustar` magic is present at offset 257 of every decompressed stream, so these
+# are real tarballs and not bare single-file .gz (which ocx-mirror cannot read,
+# and which `asset_type: binary` would silently ship still-compressed).
+#
+# strip_components: 0 because there is no wrapper directory TO strip. The tar
+# members carry a leading `./` (`./typos`, `./doc/reference.md`) while the zip
+# members do not (`typos.exe`, `doc/`) — that `.` is the archive's own
+# current-directory entry, not a top-level directory, and stripping one
+# component would consume the executable on the zip side.
+asset_type:
+  type: archive
+  strip_components: 0
+
+# `off` — FORCED by the flat layout above, not chosen. The bundle's only PATH
+# entry is a bare ${installPath}; the scan only inspects an interface-visible
+# `${installPath}/<dir>` entry, so with no subdirectory to point one at both
+# `auto` and `verify` fail spec load at exit 65:
+#
+#   bin_scan is enabled but metadata.json declares no interface-visible
+#   ${installPath}/<dir> PATH entry — the verification would inspect no file and
+#   pass green whatever the archive contains.
+#
+# The `binaries` list in metadata.json is therefore hand-maintained, exactly as
+# that error directs. It is short and stable: `typos` (`typos.exe` on Windows)
+# is the archive's only mode-0755 entry; `LICENSE-APACHE`, `LICENSE-MIT`,
+# `README.md` and everything under `doc/` are 0644 data. Quoted so no YAML 1.1
+# reader folds the bare word into boolean `false`.
+bin_scan: "off"
+
+metadata:
+  default: metadata.json
+
+catalog:
+  logo: logo.svg
+
+versions:
+  # 1.47.2 is the floor: recent releases only, no deep backfill. It puts three
+  # releases in range (v1.47.2, v1.48.0, v1.49.0), each of which was re-listed
+  # by hand and carries all five upstream assets — an asset-less release inside
+  # the range is dropped SILENTLY by the pipeline, so the floor has to be an
+  # observation rather than a guess.
+  min: "1.47.2"
+  new_per_run: 5
+  poll_interval: "21 */6 * * *"
+
+tests:
+  # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
+  # `catalog.logo` above, which resolve against this spec's own directory.
+  - name: smoke
+    script: typos/tests/smoke.star
+
+annotations:
+  # From the Phase 1.5 license gate:
+  #   $ gh api repos/crate-ci/typos/license --jq '.license.spdx_id'
+  #   Apache-2.0
+  # Upstream is dual-licensed `MIT OR Apache-2.0` (both LICENSE-APACHE and
+  # LICENSE-MIT sit at its repo root and ship inside every release archive);
+  # Apache-2.0 is the arm recorded here and in NOTICE.md.
+  org.opencontainers.image.licenses: "Apache-2.0"
+
+announce:
+  # Spelled out, not derived from target.repository — the logical name and the
+  # physical path are related by convention only.
+  package: crate-ci/typos
+  fork: ocx-contrib/index
