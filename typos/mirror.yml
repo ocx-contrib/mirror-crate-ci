@@ -87,8 +87,8 @@ assets:
     - "^typos-v\\d+\\.\\d+\\.\\d+-x86_64-apple-darwin\\.tar\\.gz$"
   darwin/arm64:
     - "^typos-v\\d+\\.\\d+\\.\\d+-aarch64-apple-darwin\\.tar\\.gz$"
-  # windows/amd64:
-  #   - "^typos-v\\d+\\.\\d+\\.\\d+-x86_64-pc-windows-msvc\\.zip$"
+  windows/amd64:
+    - "^typos-v\\d+\\.\\d+\\.\\d+-x86_64-pc-windows-msvc\\.zip$"
 
 # Every archive — tarball and zip alike — is FLAT: the executable sits at the
 # archive root beside `LICENSE-APACHE`, `LICENSE-MIT`, `README.md` and a `doc/`

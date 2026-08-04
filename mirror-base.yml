@@ -97,9 +97,9 @@ platforms:
     runner: macos-14
     shell: bash
   #
-  # windows/amd64:
-  #   runner: windows-latest
-  #   shell: pwsh
+  windows/amd64:
+    runner: windows-latest
+    shell: pwsh
 
 notify:
   discord:
