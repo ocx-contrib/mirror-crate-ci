@@ -137,7 +137,7 @@ versions:
   # observation rather than a guess.
   min: "1.47.2"
   new_per_run: 5
-  poll_interval: "21 */6 * * *"
+  poll_interval: "54 5-23/6 * * *"
 
 tests:
   # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
